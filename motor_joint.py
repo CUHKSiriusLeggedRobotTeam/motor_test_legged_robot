@@ -3,7 +3,7 @@ Motor Module example program.
 '''
 
 from os import closerange
-import motormodule as mm
+
 import time
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,11 +11,18 @@ import csv
 import datetime
 
 class TestModule:
-	def __init__(self,can_id,stand_time,COM):
+	def __init__(self,can_id,stand_time,COM,sim):
 		self.COM=COM
 		self.can_id=can_id	
 		self.stand_time=stand_time
-		self.mmc = mm.MotorModuleController(self.COM)		# Connect to the controller's serial port
+		if sim!=0:
+			import motormodule as mm
+			self.mmc = mm.MotorModuleController(self.COM)		# Connect to the controller's serial port
+			self.init_motor_com(1)
+		self.l1 = 0.079#_abadLinkLength;
+		self.l2 = 0.3#_hipLinkLength;
+		self.l3 = 0.3#_kneeLinkLength;
+		self.l4 = 0#_kneeLinkY_offset;
 	def init_motor_com(self,flag):
 		if flag:
 			self.mmc.disable_motor(self.can_id[0])
@@ -70,13 +77,19 @@ class TestModule:
 		#p_des = start_position[0]
 		error=[p_des-real_position[0],v_des-real_Velocity[0],t_des-real_Current[0]]
 		return error,[real_position,real_Velocity,real_Current]
-	def disable_motor(self,flag):
-		if flag:
-			self.mmc.disable_motor(self.can_id[0]) # Disable motor with CAN ID 1
-			self.mmc.disable_motor(self.can_id[1]) # Disable motor with CAN ID 1
-			self.mmc.disable_motor(self.can_id[2]) # Disable motor with CAN ID 1
-		else:
-			self.mmc.disable_motor(self.can_id[1]) # Disable motor with CAN ID 1
+	def disable_motor(self,flag,sim):
+		if sim!=0:
+			if flag:
+				self.mmc.disable_motor(self.can_id[0]) # Disable motor with CAN ID 1
+				self.mmc.disable_motor(self.can_id[1]) # Disable motor with CAN ID 1
+				self.mmc.disable_motor(self.can_id[2]) # Disable motor with CAN ID 1
+			else:
+				self.mmc.disable_motor(self.can_id[1]) # Disable motor with CAN ID 1
+	def send_zero_to_motor(self,sim):
+		if sim!=0:
+			self.mmc.send_command(self.can_id[0], 0 ,  0, 0,0, 0)
+			self.mmc.send_command(self.can_id[1], 0 ,  0, 0,0, 0)
+			self.mmc.send_command(self.can_id[2], 0 ,  0, 0,0, 0)
 	def cubicBezier(self,y0,yf,x):
 		#y0,yf,x is 3 list
 		bezier=[0,0,0]
@@ -147,26 +160,75 @@ class TestModule:
 		height=[]
 		anguar=[]
 		for i in range(len(x)):
-			# height.append(np.sqrt(x[i]*x[i]+y[i]*y[i]))
-			# if xx[i]!=0:
-			# 	x=xx[i]
-			# 	y=yy[i]
-			# 	theat0=0
-			# 	thetap=np.arctan(x/y)
-			# 	theat1=np.arccos(np.cos(thetap)*(x*x+y*y+l1*l1-l2*l2)/(2*l1*x))+np.arctan(y/x)
-			# 	theat2=np.arccos(np.cos(thetap)*(x*x+y*y-l1*l1+l2*l2)/(2*l2*x))+np.arctan(y/x)-theat1
-			# 	anguar.append([theat0,theat1,theat2])
 			anguar.append(self.calculate_joint_angular(np.sqrt(x[i]*x[i]+y[i]*y[i]),x[i],y[i]))
 
 		return anguar
+	def getSideSign(self,leg):
+		sideSigns = [-1, 1, -1, 1]
+		return sideSigns[leg]
+	def Calculate_Jocobian_for_leg_robot(self,q,leg,J_flag,P_flag):
+
+		l1 = self.l1
+		l2 = self.l2
+		l3 = self.l3
+		l4 = self.l4
+  
+		sideSign = self.getSideSign(leg);
+
+		s1 = np.sin(q[0]);
+		s2 = np.sin(q[1]);
+		s3 = np.sin(q[2]);
+
+		c1 = np.cos(q[0]);
+		c2 = np.cos(q[1]);
+		c3 = np.cos(q[2]);
+
+		c23 = c2 * c3 - s2 * s3;
+		s23 = s2 * c3 + c2 * s3;
+		
+		J=np.zeros( (3,3) )
+		if J_flag:
+			J[0, 0] = 0;
+			J[0, 1] = l3 * c23 + l2 * c2;
+			J[0, 2] = l3 * c23;
+			J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 - (l1+l4) * sideSign * s1;
+			J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2;
+			J[1, 2] = -l3 * s1 * s23;
+			J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + (l1+l4) * sideSign * c1;
+			J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2;
+			J[2, 2] = l3 * c1 * s23;
+			return J
+		
+		p=[0,0,0]
+		if P_flag==1:
+			p[0] = l3 * s23 + l2 * s2;
+			p[1] = (l1+l4) * sideSign * c1 + l3 * (s1 * c23) + l2 * c2 * s1;
+			p[2] = (l1+l4) * sideSign * s1 - l3 * (c1 * c23) - l2 * c1 * c2;
+			return p
+		
+	def VMC_Control(self,q_start,q_desire,qdot_desire,qdot_real,kp_virtual_spring,kd_virtual_spring):
+		"""
+			Note:q_start is q_real
+  		"""
+		Fx=0
+		Fy=0
+		Fz=0
+		#PD control
+		Fx=kp_virtual_spring*(q_desire[0]-q_start[0])+kd_virtual_spring*(qdot_desire[0]-qdot_real[0])
+		Fy=kp_virtual_spring*(q_desire[1]-q_start[1])+kd_virtual_spring*(qdot_desire[1]-qdot_real[1])
+		Fz=kp_virtual_spring*(q_desire[2]-q_start[2])+kd_virtual_spring*(qdot_desire[2]-qdot_real[2])
+		F=np.array([Fx,Fy,Fz])
+		J=self.Calculate_Jocobian_for_leg_robot(q_desire,0,1,0)
+		Torque=np.dot(J.T,F.T)
+		return Torque
 
 
 def main():
 	can_id=[1,2,3]
 	stand_time=3
 	COM="COM10"
-	tm=TestModule(can_id,stand_time,COM)
-	tm.init_motor_com(1)
+	sim=0 #use for test code
+	tm=TestModule(can_id,stand_time,COM,sim)
 	v_des=0
 	t_des=0
 	#big dog
@@ -175,6 +237,9 @@ def main():
 	#mini dog
 	# kp=35#200	#450  #150 #5
 	# kd=1.4#5 #25  #0.005 	
+ 	kp_virtual_spring=1
+  	kd_virtual_spring=0.1
+   
 	kp_joint=55
 	kd_joint=1.3
 	t_p_e=0
@@ -183,9 +248,11 @@ def main():
 	cnt=0
 	count=0
 	detat=0.01
-	
+	#flag=1 vmc control for leg
+	#flag=2 position control for leg
+	#flag=3 postion and torque control for one motor
 	flag=1
-	#dt=0.01
+
 	xx=[]#t
 	yy=[]#pos
 	realp=[]
@@ -197,17 +264,87 @@ def main():
 	zz_v=[]
 	pdres=[0]
 	open_draw_flag_v=0
-	f = open('m41_0.csv','w',encoding='utf-8',newline='')
-	csv_writer = csv.writer(f)
-	csv_writer.writerow(["Time","P","V","C"])
+	if sim!=0:
+		f = open('m41_0.csv','w',encoding='utf-8')
+		csv_writer = csv.writer(f)
+		csv_writer.writerow(["Time","P","V","C"])
 	t_des_es=0
 	pdes_circle=tm.calculate_circle_for_foot()
 	p_start=[0,0,0]
 	insert_count=0
+	t_des1=0.
+	t_des2=0.
+ 	t_des3=0.
+	t_des_es0=0.
+	t_des_es1=0.
+	t_des_es2=0.
 	try:
 		while(1):
 			starttime=time.time()
-			if flag==1:
+			# use for vmc control
+   			if flag==1:
+				if cnt>3:
+					# position control
+					pres=tm.cubicBezier(p_start,[0,1,1],[detat,detat,detat])
+					if sim!=0:
+						tm.mmc.send_command(can_id[0], pres[0] ,  pdres[0], kp, kd, t_des_es0)
+						time.sleep(0.001)
+						tm.mmc.send_command(can_id[1], pres[1] ,  pdres[0], kp, kd, t_des_es1)
+						time.sleep(0.001)
+						tm.mmc.send_command(can_id[2], pres[2] ,  pdres[0], kp, kd, t_des_es2)
+						time.sleep(0.001)
+						error,realdata1=tm.Read_Reply_Data(can_id[0],pres[0] , pdres[0],t_des1)
+						error,realdata2=tm.Read_Reply_Data(can_id[1],pres[1] , pdres[0],t_des2)
+						error,realdata3=tm.Read_Reply_Data(can_id[2],pres[2] , pdres[0],t_des3)
+					else:
+						realdata1=[[0],[0],[0]]
+						realdata2=[[0],[0],[0]]
+						realdata3=[[0],[0],[0]]
+         
+
+					t_des_es0=t_des1+kp_joint*( pres[0]-realdata1[0][0])+kd_joint*(pdres[0]-realdata1[1][0])
+					t_des_es1=t_des2+kp_joint*( pres[0]-realdata2[0][0])+kd_joint*(pdres[0]-realdata2[1][0])
+					t_des_es2=t_des3+kp_joint*( pres[0]-realdata3[0][0])+kd_joint*(pdres[0]-realdata3[1][0])
+		
+					t_des_vmc=tm.VMC_Control(p_start,[0,1,1],[0,0,0],[realdata1[1][0],realdata2[1][0],realdata3[1][0]],kp_virtual_spring,kd_virtual_spring)
+					t_des1=t_des_vmc[0]
+					t_des2=t_des_vmc[1]
+					t_des3=t_des_vmc[2]
+					print("vmc----",t_des_vmc)
+					xx.append(detat)
+					yy.append(pres)
+					desirev.append(pdres)
+					realp.append(realdata1[0])
+					realv.append(realdata1[1])
+					# detat=count/(len(pdes_circle))
+					# t_p_e=abs(p_des[0]-realdata[0][0])
+					# print("Desire--->",pres,"Joint2->",realdata1,"Joint3",realdata2,count)
+					# if insert_count < 10:
+					insert_count+=1
+					# detat = cnt * dt
+					# 	counting = 0.01
+					# 	detat = insert_count * counting
+					detat=cnt*dt
+					if count>=(len(pdes_circle)-1):
+						count=0
+					if insert_count>=10:
+						count+=1
+					# 	# insert_count=0
+						detat = 1
+						# p_start=pdes_circle[count-1]
+						# cnt=0
+						# print("ok---- t_p_e",t_p_e)
+						# open_draw_flag=1
+						# break
+					# if count>30:
+					# 	p_start=pdes_circle[count-10]
+					# if t_p_e<0.05:
+					# 	print("ok---- t_p_e",t_p_e)
+					# 	open_draw_flag=1
+					# 	break
+				else:
+					tm.send_zero_to_motor(sim)
+			elif flag==2:
 				if cnt>3:
 					# position control
 					pres=tm.cubicBezier(p_start,pdes_circle[count],[detat,detat,detat])
@@ -261,7 +398,7 @@ def main():
 					tm.mmc.send_command(can_id[0], 0 ,  0, 0,0, 0)
 					tm.mmc.send_command(can_id[1], 0 ,  0, 0,0, 0)
 					tm.mmc.send_command(can_id[2], 0 ,  0, 0,0, 0)
-			elif flag==2:
+			elif flag==3:
 				if cnt>3:
 					# pres=tm.cubicBezier(p_start,pdes_circle[count],[detat,detat,detat])
 					pres=tm.cubicBezier([1,1,1],[2,2,2],[detat,detat,detat])
@@ -305,21 +442,22 @@ def main():
 			plt.plot(np.array(xx_v),np.array(yy_v),color="deeppink",linewidth=2,linestyle=':',label='Vd', marker='o')
 			plt.plot(np.array(xx_v),np.array(zz_v),color="goldenrod",linewidth=2,linestyle=':',label='Vr', marker='o')
 			plt.show()
-			tm.disable_motor(1)
+			tm.disable_motor(1,sim)
 		if open_draw_flag==1:
 			open_draw_flag=0
-			plt.figure(figsize=(10,5))#figsize用来设置图形的大小，10为图形的宽，5为图形的高，单位为英寸（1英寸=2.5cm）
+			plt.figure(figsize=(10,5))
 			plt.plot(np.array(xx),np.array(yy),color="deeppink",linewidth=2,linestyle=':',label='DPos', marker='o')
 			plt.plot(np.array(xx),np.array(realp),color="darkblue",linewidth=1,linestyle='--',label='RPos', marker='+')
 			plt.plot(np.array(xx),np.array(realv),color="goldenrod",linewidth=1.5,linestyle='-',label='RVelocity', marker='*')
 			plt.plot(np.array(xx),np.array(desirev),color="yellow",linewidth=1.5,linestyle='-',label='DVelocity', marker='x')
 			plt.legend(loc=2,labels=['DPos','RPos','RVelocity','DVelocity'])
 			plt.show()
-			tm.disable_motor(1)
+			tm.disable_motor(1,sim)
 	except KeyboardInterrupt:
-		tm.disable_motor(1)
-		f.close()
-	tm.disable_motor(1)
+		tm.disable_motor(1,sim)
+		if sim!=0:
+			f.close()
+	tm.disable_motor(1,sim)
 	
 if __name__=='__main__':
 	main()
