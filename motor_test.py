@@ -49,6 +49,8 @@ class TestModule:
 		print("Pos_Error"+str(p_des-real_position[0])+"Ves_Error"+str(abs(v_des)-abs(real_Velocity[0]))+"Current_Error"+str(abs(t_des)-abs(real_Current[0])))
 		#p_des = start_position[0]
 		error=[p_des-real_position[0],v_des-real_Velocity[0],t_des-real_Current[0]]
+	
+		print("===== ",real)
 		return error,[real_position,real_Velocity,real_Current]
 	def disable_motor(self): 
 		self.mmc.disable_motor(self.can_id) # Disable motor with CAN ID 1
@@ -137,7 +139,7 @@ def main():
 	COM="COM10"
 	tm=TestModule(can_id,stand_time,COM)
 	tm.init_motor_com()
-	flag_1=0
+	flag_1=1
 	if flag_1==1:
 		p_start=[0,0,0]
 		p_des=[3,3,3]
@@ -207,6 +209,7 @@ def main():
 					# pdres=tm.cubicBezierFirstDerivative(p_start,p_des,[detat,detat,detat])
 					tm.mmc.send_command(can_id, pres[1] , 0, kp, kd, t_des)
 					error,realdata=tm.Read_Reply_Data(can_id,pres[1] , 0,t_des)
+					print("-----",realdata)
 					xx.append(detat)
 					yy.append(pres)
 					desirev.append(pdres)
@@ -214,7 +217,7 @@ def main():
 					realv.append(realdata[1])
 					
 					t_p_e=abs(p_des[0]-realdata[0][0])
-					print("Desire",pres,pdres,realdata[0][0],t_p_e,count)
+					print("Desire",pres,pdres,realdata[0],t_p_e,count)
 					# count+=1
 					# if count>=len(pdes_circle):
 					# 	count=0
@@ -237,6 +240,7 @@ def main():
 				if cnt>3:
 					tm.mmc.send_command(can_id, pres[0] ,  pdres[0], kp, kd, t_des)
 					error,realdata=tm.Read_Reply_Data(can_id,pres[0] , pdres[0],t_des)
+					
 					xx.append(detat)
 					yy.append(pres)
 					desirev.append(pdres)

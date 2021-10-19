@@ -173,37 +173,51 @@ class TestModule:
 		l3 = self.l3
 		l4 = self.l4
   
-		sideSign = self.getSideSign(leg);
+		sideSign = self.getSideSign(leg)
 
-		s1 = np.sin(q[0]);
-		s2 = np.sin(q[1]);
-		s3 = np.sin(q[2]);
+		s1 = np.sin(q[0])
+		s2 = np.sin(q[1])
+		s3 = np.sin(q[2])
 
-		c1 = np.cos(q[0]);
-		c2 = np.cos(q[1]);
-		c3 = np.cos(q[2]);
+		c1 = np.cos(q[0])
+		c2 = np.cos(q[1])
+		c3 = np.cos(q[2])
 
-		c23 = c2 * c3 - s2 * s3;
-		s23 = s2 * c3 + c2 * s3;
-		
+		c23 = c2 * c3 - s2 * s3
+		s23 = s2 * c3 + c2 * s3
+	
 		J=np.zeros( (3,3) )
 		if J_flag:
-			J[0, 0] = 0;
-			J[0, 1] = l3 * c23 + l2 * c2;
-			J[0, 2] = l3 * c23;
-			J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 - (l1+l4) * sideSign * s1;
-			J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2;
-			J[1, 2] = -l3 * s1 * s23;
-			J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + (l1+l4) * sideSign * c1;
-			J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2;
-			J[2, 2] = l3 * c1 * s23;
+			J[0, 0] = 0
+			J[0, 1] = l3 * c23 + l2 * c2
+			J[0, 2] = l3 * c23
+			J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 - (l1+l4) * sideSign * s1
+			J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2
+			J[1, 2] = -l3 * s1 * s23
+			J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + (l1+l4) * sideSign * c1
+			J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2
+			J[2, 2] = l3 * c1 * s23
 			return J
+		# if J_flag:
+		# 	J[0, 0] = 0
+		# 	J[0, 1] = l3 * c23 + l2 * c2
+		# 	J[0, 2] = l3 * c23
+		# 	J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 + l1 * c1
+		# 	J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2
+		# 	J[1, 2] = -l3 * s1 * s23
+		# 	J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + l1 * s1
+		# 	J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2
+		# 	J[2, 2] = l3 * c1 * s23
+		# 	return J
 		
 		p=[0,0,0]
 		if P_flag==1:
-			p[0] = l3 * s23 + l2 * s2;
-			p[1] = (l1+l4) * sideSign * c1 + l3 * (s1 * c23) + l2 * c2 * s1;
-			p[2] = (l1+l4) * sideSign * s1 - l3 * (c1 * c23) - l2 * c1 * c2;
+			p[0] = l3 * s23 + l2 * s2
+			p[1] = (l1+l4) * sideSign * c1 + l3 * (s1 * c23) + l2 * c2 * s1
+			p[2] = (l1+l4) * sideSign * s1 - l3 * (c1 * c23) - l2 * c1 * c2
+			# p[0] = l3 * s23 + l2 * s2
+			# p[1] = (l1+l4) * sideSign * s1 + l3 * (s1 * c23) + l2 * c2 * s1
+			# p[2] = -(l1+l4) * sideSign * c1 - l3 * (c1 * c23) - l2 * c1 * c2
 			return p
 		
 	def VMC_Control(self,q_start,q_desire,qdot_desire,qdot_real,kp_virtual_spring,kd_virtual_spring):
@@ -227,20 +241,20 @@ def main():
 	can_id=[1,2,3]
 	stand_time=3
 	COM="COM10"
-	sim=0 #use for test code
+	sim=1 #use for test code
 	tm=TestModule(can_id,stand_time,COM,sim)
 	v_des=0
 	t_des=0
 	#big dog
-	kp=35#200	#450  #150 #5
+	kp=3.5#200	#450  #150 #5
 	kd=2.4#5 #25  #0.005 	
 	#mini dog
 	# kp=35#200	#450  #150 #5
 	# kd=1.4#5 #25  #0.005 	
- 	kp_virtual_spring=1
-  	kd_virtual_spring=0.1
+	kp_virtual_spring=0.1
+	kd_virtual_spring=0.01
    
-	kp_joint=55
+	kp_joint=300
 	kd_joint=1.3
 	t_p_e=0
 	error=[]
@@ -262,7 +276,7 @@ def main():
 	xx_v=[]
 	yy_v=[]
 	zz_v=[]
-	pdres=[0]
+	pdres=[0,0,0]
 	open_draw_flag_v=0
 	if sim!=0:
 		f = open('m41_0.csv','w',encoding='utf-8')
@@ -274,7 +288,7 @@ def main():
 	insert_count=0
 	t_des1=0.
 	t_des2=0.
- 	t_des3=0.
+	t_des3=0.
 	t_des_es0=0.
 	t_des_es1=0.
 	t_des_es2=0.
@@ -282,10 +296,10 @@ def main():
 		while(1):
 			starttime=time.time()
 			# use for vmc control
-   			if flag==1:
+			if flag==1:
 				if cnt>3:
 					# position control
-					pres=tm.cubicBezier(p_start,[0,1,1],[detat,detat,detat])
+					pres=tm.cubicBezier(p_start,[0,1,2],[detat,detat,detat])
 					if sim!=0:
 						tm.mmc.send_command(can_id[0], pres[0] ,  pdres[0], kp, kd, t_des_es0)
 						time.sleep(0.001)
@@ -301,16 +315,16 @@ def main():
 						realdata2=[[0],[0],[0]]
 						realdata3=[[0],[0],[0]]
          
-
+					print("before vmc----",t_des2,kp_joint*( pres[0]-realdata1[0][0]),kd_joint*(pdres[0]-realdata1[1][0]),t_des_es1)
 					t_des_es0=t_des1+kp_joint*( pres[0]-realdata1[0][0])+kd_joint*(pdres[0]-realdata1[1][0])
-					t_des_es1=t_des2+kp_joint*( pres[0]-realdata2[0][0])+kd_joint*(pdres[0]-realdata2[1][0])
-					t_des_es2=t_des3+kp_joint*( pres[0]-realdata3[0][0])+kd_joint*(pdres[0]-realdata3[1][0])
+					t_des_es1=t_des2+kp_joint*( pres[1]-realdata2[0][0])+kd_joint*(pdres[1]-realdata2[1][0])
+					t_des_es2=t_des3+kp_joint*( pres[2]-realdata3[0][0])+kd_joint*(pdres[2]-realdata3[1][0])
 		
-					t_des_vmc=tm.VMC_Control(p_start,[0,1,1],[0,0,0],[realdata1[1][0],realdata2[1][0],realdata3[1][0]],kp_virtual_spring,kd_virtual_spring)
+					t_des_vmc=tm.VMC_Control(p_start,[0,1,2],[0,0,0],[realdata1[1][0],realdata2[1][0],realdata3[1][0]],kp_virtual_spring,kd_virtual_spring)
 					t_des1=t_des_vmc[0]
 					t_des2=t_des_vmc[1]
 					t_des3=t_des_vmc[2]
-					print("vmc----",t_des_vmc)
+					print("vmc----",t_des_vmc,t_des_es0,t_des_es1,t_des_es2)
 					xx.append(detat)
 					yy.append(pres)
 					desirev.append(pdres)
@@ -324,13 +338,13 @@ def main():
 					# detat = cnt * dt
 					# 	counting = 0.01
 					# 	detat = insert_count * counting
-					detat=cnt*dt
+					# detat=cnt*dt
 					if count>=(len(pdes_circle)-1):
 						count=0
 					if insert_count>=10:
 						count+=1
 					# 	# insert_count=0
-						detat = 1
+						# detat = 1
 						# p_start=pdes_circle[count-1]
 						# cnt=0
 						# print("ok---- t_p_e",t_p_e)
@@ -406,7 +420,7 @@ def main():
 					time.sleep(0.001)
 					# p_des_=1
 					v_des_=0#200RPM/ 0.5-42	
-					t_des=15
+					t_des=3
 					error,realdata1=tm.Read_Reply_Data(can_id[1],pres[2] , pdres[0],t_des)
 					# torque mode ok
 					t_des_es=t_des+kp_joint*( pres[2]-realdata1[0][0])+kd_joint*(v_des_-realdata1[1][0])
@@ -433,7 +447,7 @@ def main():
 				else:
 					tm.mmc.send_command(can_id[1], 0 ,  0, 0,0, 0)
 			# count += 1
-			# detat = cnt * dt
+			detat = cnt * dt
 			cnt+=1
 			# detat=cnt*detat
 		if open_draw_flag_v==1:
