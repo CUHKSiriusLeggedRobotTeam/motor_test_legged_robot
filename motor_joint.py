@@ -23,6 +23,9 @@ class TestModule:
 		self.l2 = 0.3#_hipLinkLength;
 		self.l3 = 0.3#_kneeLinkLength;
 		self.l4 = 0#_kneeLinkY_offset;
+		
+		self.mini_knee_offset=4.35
+		self.mini_hip_offset=np.pi/2
 	def init_motor_com(self,flag):
 		if flag:
 			self.mmc.disable_motor(self.can_id[0])
@@ -166,7 +169,7 @@ class TestModule:
 	def getSideSign(self,leg):
 		sideSigns = [-1, 1, -1, 1]
 		return sideSigns[leg]
-	def Calculate_Jocobian_for_leg_robot(self,q,leg,J_flag,P_flag):
+	def Calculate_Jocobian_for_leg_robot(self,q,inv_xyz,leg,J_flag,P_flag,Inv_flag):
 
 		l1 = self.l1
 		l2 = self.l2
@@ -187,52 +190,66 @@ class TestModule:
 		s23 = s2 * c3 + c2 * s3
 	
 		J=np.zeros( (3,3) )
-		if J_flag:
-			J[0, 0] = 0
-			J[0, 1] = l3 * c23 + l2 * c2
-			J[0, 2] = l3 * c23
-			J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 - (l1+l4) * sideSign * s1
-			J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2
-			J[1, 2] = -l3 * s1 * s23
-			J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + (l1+l4) * sideSign * c1
-			J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2
-			J[2, 2] = l3 * c1 * s23
-			return J
+		#fk method 1
 		# if J_flag:
 		# 	J[0, 0] = 0
 		# 	J[0, 1] = l3 * c23 + l2 * c2
 		# 	J[0, 2] = l3 * c23
-		# 	J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 + l1 * c1
+		# 	J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 - (l1+l4) * sideSign * s1
 		# 	J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2
 		# 	J[1, 2] = -l3 * s1 * s23
-		# 	J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + l1 * s1
+		# 	J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + (l1+l4) * sideSign * c1
 		# 	J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2
 		# 	J[2, 2] = l3 * c1 * s23
 		# 	return J
+		if J_flag:
+			J[0, 0] = 0
+			J[0, 1] = l3 * c23 + l2 * c2
+			J[0, 2] = l3 * c23
+			J[1, 0] = l3 * c1 * c23 + l2 * c1 * c2 + l1 * c1
+			J[1, 1] = -l3 * s1 * s23 - l2 * s1 * s2
+			J[1, 2] = -l3 * s1 * s23
+			J[2, 0] = l3 * s1 * c23 + l2 * c2 * s1 + l1 * s1
+			J[2, 1] = l3 * c1 * s23 + l2 * c1 * s2
+			J[2, 2] = l3 * c1 * s23
+			return J
 		
 		p=[0,0,0]
 		if P_flag==1:
-			p[0] = l3 * s23 + l2 * s2
-			p[1] = (l1+l4) * sideSign * c1 + l3 * (s1 * c23) + l2 * c2 * s1
-			p[2] = (l1+l4) * sideSign * s1 - l3 * (c1 * c23) - l2 * c1 * c2
 			# p[0] = l3 * s23 + l2 * s2
-			# p[1] = (l1+l4) * sideSign * s1 + l3 * (s1 * c23) + l2 * c2 * s1
-			# p[2] = -(l1+l4) * sideSign * c1 - l3 * (c1 * c23) - l2 * c1 * c2
+			# p[1] = (l1+l4) * sideSign * c1 + l3 * (s1 * c23) + l2 * c2 * s1
+			# p[2] = (l1+l4) * sideSign * s1 - l3 * (c1 * c23) - l2 * c1 * c2
+			p[0] = l3 * s23 + l2 * s2
+			p[1] = (l1+l4) * sideSign * s1 + l3 * (s1 * c23) + l2 * c2 * s1
+			p[2] = -(l1+l4) * sideSign * c1 - l3 * (c1 * c23) - l2 * c1 * c2
 			return p
-		
-	def VMC_Control(self,q_start,q_desire,qdot_desire,qdot_real,kp_virtual_spring,kd_virtual_spring):
+		if Inv_flag==1:
+			#assuming just have z aixes
+			theta0=0
+			h=inv_xyz[2]
+			theta1 = -np.arccos((l2*l2+h*h-l3*l3)/(2*l2*h))
+			theta2 = np.pi - np.arccos((l2*l2+l3*l3-h*h)/(2*l2*l3))
+			return [0,theta1,theta2]
+	def VMC_Control(self,p_foot_real,p_foot_desire,q_joint_dot_desire,q_joint_dot_real,kp_virtual_spring,kd_virtual_spring):
 		"""
-			Note:q_start is q_real
+			Note:p_foot_desire is q_real
   		"""
 		Fx=0
 		Fy=0
 		Fz=0
+  		#q,inv_xyz,leg,J_flag,P_flag,Inv_flag
+		q_desire=self.Calculate_Jocobian_for_leg_robot([0,0,0],p_foot_real,0,0,0,1)
+  		J=self.Calculate_Jocobian_for_leg_robot(q_desire,[0,0,0],0,1,0,0)
+		p_foot_dot_desire=np.dot(np.linalg.inv(J),q_joint_dot_desire)
+		p_foot_dot_real=np.dot(np.linalg.inv(J),q_joint_dot_real)
+		# print(p_foot_dot_desire,p_foot_dot_real)
 		#PD control
-		Fx=kp_virtual_spring*(q_desire[0]-q_start[0])+kd_virtual_spring*(qdot_desire[0]-qdot_real[0])
-		Fy=kp_virtual_spring*(q_desire[1]-q_start[1])+kd_virtual_spring*(qdot_desire[1]-qdot_real[1])
-		Fz=kp_virtual_spring*(q_desire[2]-q_start[2])+kd_virtual_spring*(qdot_desire[2]-qdot_real[2])
+		Fx=kp_virtual_spring*(p_foot_real[0]-p_foot_desire[0])+kd_virtual_spring*(p_foot_dot_real[0]-p_foot_dot_desire[0])
+		Fy=kp_virtual_spring*(p_foot_real[1]-p_foot_desire[1])+kd_virtual_spring*(p_foot_dot_real[1]-p_foot_dot_desire[1])
+		Fz=kp_virtual_spring*(p_foot_real[2]-p_foot_desire[2])+kd_virtual_spring*(p_foot_dot_real[2]-p_foot_dot_desire[2])
 		F=np.array([Fx,Fy,Fz])
-		J=self.Calculate_Jocobian_for_leg_robot(q_desire,0,1,0)
+		print(F)
+		
 		Torque=np.dot(J.T,F.T)
 		return Torque
 
@@ -241,20 +258,20 @@ def main():
 	can_id=[1,2,3]
 	stand_time=3
 	COM="COM10"
-	sim=1 #use for test code
+	sim=0 #use for test code
 	tm=TestModule(can_id,stand_time,COM,sim)
 	v_des=0
 	t_des=0
 	#big dog
-	kp=3.5#200	#450  #150 #5
+	kp=35#200	#450  #150 #5
 	kd=2.4#5 #25  #0.005 	
 	#mini dog
 	# kp=35#200	#450  #150 #5
 	# kd=1.4#5 #25  #0.005 	
-	kp_virtual_spring=0.1
+	kp_virtual_spring=10
 	kd_virtual_spring=0.01
    
-	kp_joint=300
+	kp_joint=30
 	kd_joint=1.3
 	t_p_e=0
 	error=[]
@@ -292,6 +309,8 @@ def main():
 	t_des_es0=0.
 	t_des_es1=0.
 	t_des_es2=0.
+	p_foot_desire=[0,0,0.35]
+	q_joint_desire=tm.Calculate_Jocobian_for_leg_robot([0,0,0],p_foot_desire,0,0,0,1)
 	try:
 		while(1):
 			starttime=time.time()
@@ -299,7 +318,7 @@ def main():
 			if flag==1:
 				if cnt>3:
 					# position control
-					pres=tm.cubicBezier(p_start,[0,1,2],[detat,detat,detat])
+					pres=tm.cubicBezier(p_start,q_joint_desire,[detat,detat,detat])
 					if sim!=0:
 						tm.mmc.send_command(can_id[0], pres[0] ,  pdres[0], kp, kd, t_des_es0)
 						time.sleep(0.001)
@@ -314,17 +333,21 @@ def main():
 						realdata1=[[0],[0],[0]]
 						realdata2=[[0],[0],[0]]
 						realdata3=[[0],[0],[0]]
-         
-					print("before vmc----",t_des2,kp_joint*( pres[0]-realdata1[0][0]),kd_joint*(pdres[0]-realdata1[1][0]),t_des_es1)
+
 					t_des_es0=t_des1+kp_joint*( pres[0]-realdata1[0][0])+kd_joint*(pdres[0]-realdata1[1][0])
 					t_des_es1=t_des2+kp_joint*( pres[1]-realdata2[0][0])+kd_joint*(pdres[1]-realdata2[1][0])
 					t_des_es2=t_des3+kp_joint*( pres[2]-realdata3[0][0])+kd_joint*(pdres[2]-realdata3[1][0])
-		
-					t_des_vmc=tm.VMC_Control(p_start,[0,1,2],[0,0,0],[realdata1[1][0],realdata2[1][0],realdata3[1][0]],kp_virtual_spring,kd_virtual_spring)
+					
+					#VMC_Control(self,p_foot_real,p_foot_desire,q_dot_desire,q_dot_real,kp_virtual_spring,kd_virtual_spring)
+					#q,inv_xyz,leg,J_flag,P_flag,Inv_flag
+					#foot pose
+					p_foot_real=tm.Calculate_Jocobian_for_leg_robot([realdata1[0][0],realdata2[0][0],realdata3[0][0]],[0,0,0],0,0,1,0)
+     
+					t_des_vmc=tm.VMC_Control(p_foot_real,p_foot_desire,[0,0,0],[realdata1[1][0],realdata2[1][0],realdata3[1][0]],kp_virtual_spring,kd_virtual_spring)
 					t_des1=t_des_vmc[0]
 					t_des2=t_des_vmc[1]
 					t_des3=t_des_vmc[2]
-					print("vmc----",t_des_vmc,t_des_es0,t_des_es1,t_des_es2)
+
 					xx.append(detat)
 					yy.append(pres)
 					desirev.append(pdres)
